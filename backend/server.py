@@ -1,16 +1,21 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from datetime import  date
 import db_helper
 from typing import List
 from pydantic import BaseModel
+
+app = FastAPI()
 
 class Expense(BaseModel):
     amount:float
     category: str
     notes: str
 
+class DateRange(BaseModel):
+    start_date: date
+    end_date: date
 
-app = FastAPI()
+
 
 @app.get("/expenses/{expense_date}", response_model=List[Expense])
 def get_expenses(expense_date: date):
@@ -23,3 +28,20 @@ def add_or_update_expense(expense_date:date, expenses:List[Expense]):
     for expense in expenses:
         db_helper.insert_expense(expense_date, expense.amount, expense.category,expense.notes)
     return "Updated successfully"
+
+@app.post("/analytics/")
+def get_analytics(date_range: DateRange):
+    data = db_helper.fetch_expense_summary(date_range.start_date,date_range.end_date)
+    if data is None:
+        raise HTTPException(status_code=500,detail="Failed to retrieve the expense summary from database")
+
+    breakdown={}
+    total = sum([row['Total'] for row in data])
+    for row in data:
+        percentage = (row['Total']/total)*100 if total != 0 else 0
+        breakdown[row['category']]={
+            "total":row['Total'],
+            "percentage":percentage
+        }
+    return breakdown
+
